@@ -35,6 +35,7 @@ import (
 	"github.com/Luoyangan/LQBOT/internal/utils"
 	"github.com/Luoyangan/LQBOT/internal/version"
 	"github.com/Luoyangan/LQBOT/plugins/online"
+	"github.com/Luoyangan/LQBOT/plugins/onlinetime"
 	"github.com/Luoyangan/LQBOT/plugins/whitelist"
 
 	// <--new-plugin-import-here
@@ -218,6 +219,7 @@ func New(cfg *types.Config) (*Bot, error) {
 	// Register plugins (commands + event listeners)
 	bot.RegisterPlugin(&whitelist.WhitelistPlugin{})
 	bot.RegisterPlugin(&online.OnlinePlugin{})
+	bot.RegisterPlugin(&onlinetime.OnlineTimePlugin{})
 	bot.registerPlugins()
 	bot.initPluginSystem()
 

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultMCURL   = "http://localhost:25565"
+	defaultMCURL   = "http://localhost:25566"
 	defaultMCToken = ""
 )
 
@@ -101,7 +101,7 @@ func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mc
 			"## 申请白名单用法\n" +
 			"- 申请白名单 <玩家名>\n" +
 			"- 示例：申请白名单 Steve\n" +
-			contract.CmdInput("我是傻逼", "点我可直接申请", false) + "\n\n"
+			contract.CmdInput("我是大傻逼", "点我可直接申请", false) + "\n\n"
 		buttons := [][]contract.MessageButton{
 			{{ID: "btn_baiming", Label: "申请白名单", Data: "申请白名单 ", Style: 1, ActionType: 2}},
 		}
@@ -142,18 +142,26 @@ func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mc
 	if err := pc.Storage.Get(key, &existing); err == nil && existing != "" {
 		var record whitelistLocalRecord
 		if json.Unmarshal([]byte(existing), &record) == nil {
-			return ctx.ReplyMarkdown(fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
+			md := fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
 				"## 玩家名已被占用\n"+
 				"- **玩家名**: %s\n"+
 				"- **状态**: ❌ 该玩家名已在白名单中\n"+
 				"- **申请用户**: %s\n"+
-				"- **申请时间**: %s", playerName, contract.MentionUser(record.AppliedBy), formatLocalRecord(existing)))
+				"- **申请时间**: %s", playerName, contract.MentionUser(record.AppliedBy), formatLocalRecord(existing))
+			buttons := [][]contract.MessageButton{
+				{{ID: "btn_baiming", Label: "再次申请", Data: "申请白名单 ", Style: 1, ActionType: 2}},
+			}
+			return ctx.ReplyWithButtonRows(md, buttons)
 		}
-		return ctx.ReplyMarkdown(fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
+		md := fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
 			"## 玩家名已被占用\n"+
 			"- **玩家名**: %s\n"+
 			"- **状态**: ❌ 该玩家名已在白名单中\n"+
-			"- **申请时间**: %s", playerName, formatLocalRecord(existing)))
+			"- **申请时间**: %s", playerName, formatLocalRecord(existing))
+		buttons := [][]contract.MessageButton{
+			{{ID: "btn_baiming", Label: "再次申请", Data: "申请白名单 ", Style: 1, ActionType: 2}},
+		}
+		return ctx.ReplyWithButtonRows(md, buttons)
 	}
 
 	// ── 发送 POST 请求到 MC 服务器 ──

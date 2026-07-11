@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultMCURL   = "http://localhost:25565"
+	defaultMCURL   = "http://localhost:25566"
 	defaultMCToken = ""
 )
 
@@ -95,7 +95,7 @@ func handleOnline(ctx contract.CommandContext, pc *contract.PluginContext, mcSer
 		buf.WriteString("\n当前没有玩家在线")
 	} else {
 		for i, name := range resp.Data.Online.Players {
-			cmdText := fmt.Sprintf("查询白名单 %s", name)
+			cmdText := fmt.Sprintf("在线时长 %s", name)
 			buf.WriteString(fmt.Sprintf("%d. %s\n", i+1, contract.CmdInput(cmdText, name, false)))
 		}
 	}
