@@ -25,9 +25,9 @@ function Build-Windows {
     Write-Host "[build] Windows amd64  $GIT_COMMIT ($GIT_DATE) ..." -ForegroundColor Green
     $env:GOOS = "windows"
     $env:GOARCH = "amd64"
-    go build -ldflags="$LDFLAGS" -o "$ROOT\LQBOT-v$VERSION-$GIT_COMMIT.exe" "$ROOT\cmd\bot\main.go"
+    go build -ldflags="$LDFLAGS" -o "$ROOT\MC-LQBOT-v$VERSION-$GIT_COMMIT.exe" "$ROOT\cmd\bot\main.go"
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "[done] LQBOT-v$VERSION-$GIT_COMMIT.exe" -ForegroundColor Green
+        Write-Host "[done] MC-LQBOT-v$VERSION-$GIT_COMMIT.exe" -ForegroundColor Green
     }
 }
 
@@ -35,9 +35,9 @@ function Build-Linux {
     Write-Host "[build] Linux amd64  $GIT_COMMIT ($GIT_DATE) ..." -ForegroundColor Green
     $env:GOOS = "linux"
     $env:GOARCH = "amd64"
-    go build -ldflags="$LDFLAGS" -o "$ROOT\LQBOT-v$VERSION-$GIT_COMMIT-linux" "$ROOT\cmd\bot\main.go"
+    go build -ldflags="$LDFLAGS" -o "$ROOT\MC-LQBOT-v$VERSION-$GIT_COMMIT-linux" "$ROOT\cmd\bot\main.go"
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "[done] LQBOT-v$VERSION-$GIT_COMMIT-linux" -ForegroundColor Green
+        Write-Host "[done] MC-LQBOT-v$VERSION-$GIT_COMMIT-linux" -ForegroundColor Green
     }
 }
 

@@ -34,6 +34,9 @@ import (
 	"github.com/Luoyangan/LQBOT/internal/types"
 	"github.com/Luoyangan/LQBOT/internal/utils"
 	"github.com/Luoyangan/LQBOT/internal/version"
+	"github.com/Luoyangan/LQBOT/plugins/bank"
+	"github.com/Luoyangan/LQBOT/plugins/checkin"
+	"github.com/Luoyangan/LQBOT/plugins/menu"
 	"github.com/Luoyangan/LQBOT/plugins/online"
 	"github.com/Luoyangan/LQBOT/plugins/onlinetime"
 	"github.com/Luoyangan/LQBOT/plugins/whitelist"
@@ -217,9 +220,12 @@ func New(cfg *types.Config) (*Bot, error) {
 	}
 
 	// Register plugins (commands + event listeners)
+	bot.RegisterPlugin(&bank.BankPlugin{})
+	bot.RegisterPlugin(&checkin.CheckinPlugin{})
 	bot.RegisterPlugin(&whitelist.WhitelistPlugin{})
 	bot.RegisterPlugin(&online.OnlinePlugin{})
 	bot.RegisterPlugin(&onlinetime.OnlineTimePlugin{})
+	bot.RegisterPlugin(&menu.MenuPlugin{})
 	bot.registerPlugins()
 	bot.initPluginSystem()
 
@@ -252,6 +258,7 @@ func (b *Bot) initPluginSystem() {
 			Storage:   b.storage,
 			QQAPI:     b.api,
 			Scheduler: b.scheduler,
+			RawDB:     b.storage.DB(),
 		}
 
 		// Inject plugin config from config.yaml if available

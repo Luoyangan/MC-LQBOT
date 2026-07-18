@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Luoyangan/LQBOT/internal/contract"
+	"gorm.io/gorm"
 )
 
 const (
@@ -20,12 +21,28 @@ const (
 	defaultMCToken = ""
 )
 
+// WhitelistRecord 是白名单记录的数据表模型。
+type WhitelistRecord struct {
+	PlayerName  string    `gorm:"primaryKey;size:32"`                         // MC 玩家名（小写，主键）
+	DisplayName string    `gorm:"column:display_name;size:32"`                // MC 玩家名（原始大小写）
+	AppliedBy   string    `gorm:"column:applied_by;type:text;not null;index"` // 申请者 QQ 用户 ID
+	GroupID     string    `gorm:"column:group_id;type:text;not null"`         // 申请时所在群
+	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`           // 申请时间
+	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`           // 更新时间
+}
+
 // WhitelistPlugin 实现 contract.Plugin 接口（可通过 config.yaml 注入配置）。
 type WhitelistPlugin struct{}
 
 func (p *WhitelistPlugin) Name() string { return "whitelist" }
 
 func (p *WhitelistPlugin) Init(pc *contract.PluginContext) error {
+	// Auto-migrate whitelist table
+	db := pc.RawDB.(*gorm.DB)
+	if err := db.AutoMigrate(&WhitelistRecord{}); err != nil {
+		return fmt.Errorf("auto migrate whitelist table: %w", err)
+	}
+
 	mcServerURL := defaultMCURL
 	mcToken := defaultMCToken
 	if pc.SharedConfig != nil {
@@ -49,7 +66,7 @@ func (p *WhitelistPlugin) Init(pc *contract.PluginContext) error {
 		Description: "申请 Minecraft 服务器白名单",
 		Usage:       "申请白名单 <玩家名>",
 		Handler: func(ctx contract.CommandContext) error {
-			return handleWhitelist(ctx, pc, mcServerURL, mcToken)
+			return handleWhitelist(ctx, pc, db, mcServerURL, mcToken)
 		},
 	})
 
@@ -59,7 +76,7 @@ func (p *WhitelistPlugin) Init(pc *contract.PluginContext) error {
 		Usage:       "移除白名单 <玩家名>",
 		Permission:  "owner_exact",
 		Handler: func(ctx contract.CommandContext) error {
-			return handleRemoveWhitelist(ctx, pc, mcServerURL, mcToken)
+			return handleRemoveWhitelist(ctx, pc, db, mcServerURL, mcToken)
 		},
 	})
 
@@ -68,7 +85,7 @@ func (p *WhitelistPlugin) Init(pc *contract.PluginContext) error {
 		Description: "查询玩家白名单状态",
 		Usage:       "查询白名单 @用户|<玩家名>",
 		Handler: func(ctx contract.CommandContext) error {
-			return handleCheckWhitelist(ctx, pc, mcServerURL, mcToken)
+			return handleCheckWhitelist(ctx, pc, db, mcServerURL, mcToken)
 		},
 	})
 
@@ -78,18 +95,8 @@ func (p *WhitelistPlugin) Init(pc *contract.PluginContext) error {
 // mcPlayerNameRegex 校验 MC 玩家名：3-16 位，允许字母、数字、下划线。
 var mcPlayerNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_]{3,16}$`)
 
-// whitelistStorageKey 根据玩家名生成存储键。
-func whitelistStorageKey(playerName string) string {
-	return "whitelist:" + strings.ToLower(playerName)
-}
-
-// whitelistUserKey 根据 QQ 用户 OpenID 生成存储键，用于限制一用户一玩家名。
-func whitelistUserKey(authorID string) string {
-	return "whitelist:user:" + authorID
-}
-
 // handleWhitelist 是申请白名单的核心逻辑。
-func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mcServerURL, mcToken string) error {
+func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, db *gorm.DB, mcServerURL, mcToken string) error {
 	avatarURL := fmt.Sprintf("https://q.qlogo.cn/qqapp/%s/%s/640", pc.QQAPI.AppID(), ctx.AuthorID())
 	// 只允许群聊使用
 	if ctx.Scene() != contract.SceneGroup {
@@ -126,38 +133,27 @@ func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mc
 		return ctx.ReplyWithButtonRows(md, buttons)
 	}
 
+	lowerName := strings.ToLower(playerName)
+
 	// ── 检查该 QQ 用户是否已申请过 ──
-	userKey := whitelistUserKey(ctx.AuthorID())
-	var existingPlayer string
-	if err := pc.Storage.Get(userKey, &existingPlayer); err == nil && existingPlayer != "" {
+	var existingUser WhitelistRecord
+	if err := db.Where("applied_by = ?", ctx.AuthorID()).First(&existingUser).Error; err == nil {
 		return ctx.ReplyMarkdown(fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
 			"## 已申请过白名单\n"+
 			"- **玩家名**: %s\n"+
-			"- **状态**: ❌ 请勿重复申请", existingPlayer))
+			"- **状态**: ❌ 请勿重复申请", displayName(existingUser)))
 	}
 
 	// ── 玩家名去重检查 ──
-	key := whitelistStorageKey(playerName)
-	var existing string
-	if err := pc.Storage.Get(key, &existing); err == nil && existing != "" {
-		var record whitelistLocalRecord
-		if json.Unmarshal([]byte(existing), &record) == nil {
-			md := fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
-				"## 玩家名已被占用\n"+
-				"- **玩家名**: %s\n"+
-				"- **状态**: ❌ 该玩家名已在白名单中\n"+
-				"- **申请用户**: %s\n"+
-				"- **申请时间**: %s", playerName, contract.MentionUser(record.AppliedBy), formatLocalRecord(existing))
-			buttons := [][]contract.MessageButton{
-				{{ID: "btn_baiming", Label: "再次申请", Data: "申请白名单 ", Style: 1, ActionType: 2}},
-			}
-			return ctx.ReplyWithButtonRows(md, buttons)
-		}
+	var existing WhitelistRecord
+	if err := db.Where("player_name = ?", lowerName).First(&existing).Error; err == nil {
 		md := fmt.Sprintf("![img #30px #30px]("+avatarURL+") | "+contract.MentionUser(ctx.AuthorID())+"\n"+
 			"## 玩家名已被占用\n"+
 			"- **玩家名**: %s\n"+
 			"- **状态**: ❌ 该玩家名已在白名单中\n"+
-			"- **申请时间**: %s", playerName, formatLocalRecord(existing))
+			"- **申请用户**: %s\n"+
+			"- **申请时间**: %s",
+			playerName, contract.MentionUser(existing.AppliedBy), existing.CreatedAt.Format("2006-01-02 15:04:05"))
 		buttons := [][]contract.MessageButton{
 			{{ID: "btn_baiming", Label: "再次申请", Data: "申请白名单 ", Style: 1, ActionType: 2}},
 		}
@@ -169,18 +165,16 @@ func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mc
 		return ctx.Reply(fmt.Sprintf("白名单添加失败：%v", err))
 	}
 
-	// ── 写入本地数据库 ──
-	record := fmt.Sprintf(`{"applied_by":"%s","group_id":"%s","time":"%s"}`,
-		ctx.AuthorID(),
-		ctx.GroupID(),
-		time.Now().Format(time.RFC3339),
-	)
-	if err := pc.Storage.Set(key, record); err != nil {
-		pc.Logger.Error("failed to save whitelist record", "player", playerName, "error", err)
+	// ── 写入数据库 ──
+	record := WhitelistRecord{
+		PlayerName:  lowerName,
+		DisplayName: playerName,
+		AppliedBy:   ctx.AuthorID(),
+		GroupID:     ctx.GroupID(),
 	}
-	// 记录用户 → 玩家名映射，防止重复申请
-	if err := pc.Storage.Set(userKey, playerName); err != nil {
-		pc.Logger.Error("failed to save user mapping", "author_id", ctx.AuthorID(), "error", err)
+	if err := db.Create(&record).Error; err != nil {
+		pc.Logger.Error("failed to save whitelist record", "player", playerName, "error", err)
+		return ctx.Reply("白名单添加成功，但本地记录保存失败，请联系管理员")
 	}
 
 	pc.Logger.Info("whitelist added",
@@ -203,7 +197,7 @@ func handleWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mc
 // ── 移除白名单 ──
 
 // handleRemoveWhitelist 处理移除白名单命令，仅群主可执行。
-func handleRemoveWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mcServerURL, mcToken string) error {
+func handleRemoveWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, db *gorm.DB, mcServerURL, mcToken string) error {
 	avatarURL := fmt.Sprintf("https://q.qlogo.cn/qqapp/%s/%s/640", pc.QQAPI.AppID(), ctx.AuthorID())
 
 	if ctx.Scene() != contract.SceneGroup {
@@ -233,15 +227,10 @@ func handleRemoveWhitelist(ctx contract.CommandContext, pc *contract.PluginConte
 	}
 
 	// 清理本地数据库记录
-	key := whitelistStorageKey(playerName)
-	var existing string
-	if err := pc.Storage.Get(key, &existing); err == nil && existing != "" {
-		_ = pc.Storage.Delete(key)
+	lowerName := strings.ToLower(playerName)
+	if err := db.Where("player_name = ?", lowerName).Delete(&WhitelistRecord{}).Error; err != nil {
+		pc.Logger.Error("failed to delete whitelist record", "player", playerName, "error", err)
 	}
-
-	// 查找并删除该玩家名对应的用户映射
-	// 通过遍历所有 whitelist:user: 前缀的 key 来查找
-	_ = pc.Storage.Delete("whitelist:user:" + ctx.AuthorID()) // 当前群主的映射一并清理
 
 	pc.Logger.Info("whitelist removed",
 		"player", playerName,
@@ -254,7 +243,7 @@ func handleRemoveWhitelist(ctx contract.CommandContext, pc *contract.PluginConte
 // ── 查询白名单 ──
 
 // handleCheckWhitelist 查询玩家白名单状态。支持玩家名或 @用户 查询。
-func handleCheckWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, mcServerURL, mcToken string) error {
+func handleCheckWhitelist(ctx contract.CommandContext, pc *contract.PluginContext, db *gorm.DB, mcServerURL, mcToken string) error {
 	avatarURL := fmt.Sprintf("https://q.qlogo.cn/qqapp/%s/%s/640", pc.QQAPI.AppID(), ctx.AuthorID())
 
 	if ctx.Scene() != contract.SceneGroup {
@@ -266,12 +255,11 @@ func handleCheckWhitelist(ctx contract.CommandContext, pc *contract.PluginContex
 	// 情况 1：@用户 查询
 	if mentions := ctx.Mentions(); len(mentions) > 0 {
 		userID := mentions[0]
-		userKey := whitelistUserKey(userID)
-		var storedPlayer string
-		if err := pc.Storage.Get(userKey, &storedPlayer); err != nil || storedPlayer == "" {
+		var userRecord WhitelistRecord
+		if err := db.Where("applied_by = ?", userID).First(&userRecord).Error; err != nil {
 			return ctx.Reply("该用户尚未申请白名单")
 		}
-		playerName = storedPlayer
+		playerName = displayName(userRecord)
 	}
 
 	// 情况 2：玩家名查询
@@ -297,11 +285,11 @@ func handleCheckWhitelist(ctx contract.CommandContext, pc *contract.PluginContex
 		return ctx.Reply("玩家名不合法")
 	}
 
+	lowerName := strings.ToLower(playerName)
+
 	// 先查本地记录
-	key := whitelistStorageKey(playerName)
-	var localRecord string
-	if err := pc.Storage.Get(key, &localRecord); err == nil && localRecord != "" {
-		recAppliedBy, recTime := parseLocalRecord(localRecord)
+	var record WhitelistRecord
+	if err := db.Where("player_name = ?", lowerName).First(&record).Error; err == nil {
 		body, err := checkWhitelist(mcServerURL, mcToken, playerName)
 		if err != nil {
 			return ctx.ReplyMarkdown(fmt.Sprintf("## 查询失败\n"+
@@ -312,7 +300,8 @@ func handleCheckWhitelist(ctx contract.CommandContext, pc *contract.PluginContex
 				"  - **申请时间**: %s\n"+
 				"- **远程状态**: ❌ 查询失败\n"+
 				"- **原因**: %v\n"+
-				"请寻找**群主**或**管理员**解决", playerName, contract.MentionUser(recAppliedBy), recTime, err))
+				"请寻找**群主**或**管理员**解决",
+				playerName, contract.MentionUser(record.AppliedBy), record.CreatedAt.Format("2006-01-02 15:04:05"), err))
 		}
 		return ctx.ReplyMarkdown(fmt.Sprintf("## 白名单查询结果\n"+
 			contract.MentionUser(ctx.AuthorID())+"\n"+
@@ -320,7 +309,8 @@ func handleCheckWhitelist(ctx contract.CommandContext, pc *contract.PluginContex
 			"- **远程状态**: %s\n"+
 			"- **本地记录**: ✅ 已申请\n"+
 			"  - **申请用户**: %s\n"+
-			"  - **申请时间**: %s\n", playerName, formatRemoteResponse(body), contract.MentionUser(recAppliedBy), formatLocalRecord(localRecord)))
+			"  - **申请时间**: %s\n",
+			playerName, formatRemoteResponse(body), contract.MentionUser(record.AppliedBy), record.CreatedAt.Format("2006-01-02 15:04:05")))
 	}
 
 	body, err := checkWhitelist(mcServerURL, mcToken, playerName)
@@ -354,12 +344,6 @@ type whitelistRemoteResponse struct {
 	Data    struct {
 		IsWhitelisted bool `json:"isWhitelisted"`
 	} `json:"data"`
-}
-
-type whitelistLocalRecord struct {
-	AppliedBy string `json:"applied_by"`
-	GroupID   string `json:"group_id"`
-	Time      string `json:"time"`
 }
 
 // whitelistRequest 向 MC 服务器发送 POST 请求执行白名单操作。
@@ -439,6 +423,14 @@ func checkWhitelist(serverURL, token, playerName string) (string, error) {
 	return strings.TrimSpace(buf.String()), nil
 }
 
+// displayName 返回玩家名的原始大小写，旧记录无 DisplayName 时回退到 PlayerName。
+func displayName(r WhitelistRecord) string {
+	if r.DisplayName != "" {
+		return r.DisplayName
+	}
+	return r.PlayerName
+}
+
 func formatRemoteResponse(jsonStr string) string {
 	var resp whitelistRemoteResponse
 	if err := json.Unmarshal([]byte(jsonStr), &resp); err != nil {
@@ -451,28 +443,4 @@ func formatRemoteResponse(jsonStr string) string {
 		return "❌ 不在白名单中"
 	}
 	return fmt.Sprintf("❌ %s", resp.Message)
-}
-
-func formatLocalRecord(jsonStr string) string {
-	var record whitelistLocalRecord
-	if err := json.Unmarshal([]byte(jsonStr), &record); err != nil {
-		return jsonStr
-	}
-	if t, err := time.Parse(time.RFC3339, record.Time); err == nil {
-		return t.Format("2006-01-02 15:04:05")
-	}
-	return record.Time
-}
-
-// parseLocalRecord 从 JSON 字符串中解析出申请用户 ID 和格式化后的时间。
-func parseLocalRecord(jsonStr string) (appliedBy, formattedTime string) {
-	var record whitelistLocalRecord
-	if err := json.Unmarshal([]byte(jsonStr), &record); err != nil {
-		return "", jsonStr
-	}
-	t, err := time.Parse(time.RFC3339, record.Time)
-	if err != nil {
-		return record.AppliedBy, record.Time
-	}
-	return record.AppliedBy, t.Format("2006-01-02 15:04:05")
 }

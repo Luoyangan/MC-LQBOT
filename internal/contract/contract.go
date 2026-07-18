@@ -494,6 +494,10 @@ type PluginContext struct {
 	// Only available when the embedded HTTP server is enabled.
 	// May be nil if the HTTP server is not initialized.
 	HTTPServer HTTPServer
+
+	// RawDB provides direct database access for plugins that need custom tables.
+	// Type-assert to *gorm.DB to use (requires importing gorm.io/gorm).
+	RawDB interface{}
 }
 
 // ── Text chain interactive elements ──
