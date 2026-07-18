@@ -36,6 +36,7 @@ import (
 	"github.com/Luoyangan/LQBOT/internal/version"
 	"github.com/Luoyangan/LQBOT/plugins/bank"
 	"github.com/Luoyangan/LQBOT/plugins/checkin"
+	"github.com/Luoyangan/LQBOT/plugins/file"
 	"github.com/Luoyangan/LQBOT/plugins/menu"
 	"github.com/Luoyangan/LQBOT/plugins/online"
 	"github.com/Luoyangan/LQBOT/plugins/onlinetime"
@@ -222,6 +223,7 @@ func New(cfg *types.Config) (*Bot, error) {
 	// Register plugins (commands + event listeners)
 	bot.RegisterPlugin(&bank.BankPlugin{})
 	bot.RegisterPlugin(&checkin.CheckinPlugin{})
+	bot.RegisterPlugin(&file.FilePlugin{})
 	bot.RegisterPlugin(&whitelist.WhitelistPlugin{})
 	bot.RegisterPlugin(&online.OnlinePlugin{})
 	bot.RegisterPlugin(&onlinetime.OnlineTimePlugin{})

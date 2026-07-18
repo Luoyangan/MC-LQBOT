@@ -31,15 +31,22 @@ func (p *MenuPlugin) Init(pc *contract.PluginContext) error {
 				"\n" +
 				"- " + contract.CmdInput("在线玩家", "在线玩家", false) +
 				"\n" +
-				"- " + contract.CmdInput("查询白名单", "查询白名单 <玩家名>|<@用户>", false) +
+				"- " + contract.CmdInput("查询白名单", "查询白名单 <玩家名>", false) +
+				"\n" +
+				"- " + contract.CmdInput("查询白名单", "查询白名单 <@用户>", false) +
 				"\n" +
 				"- " + contract.CmdInput("银行", "银行", false) +
 				"\n" +
 				"- " + contract.CmdInput("签到", "签到", false) +
 				"\n" +
-				"- " + contract.CmdInput("我的签到", "我的签到", false)
+				"- " + contract.CmdInput("我的签到", "我的签到", false) +
+				"\n" +
+				"- " + contract.CmdInput("材质包", "材质包", false)
+			buttons := [][]contract.MessageButton{
+				{{ID: "btn_github", Label: "GitHub", URL: "https://github.com/Luoyangan/MC-LQBOT", Style: 1}},
+			}
 
-			return ctx.ReplyMarkdown(md)
+			return ctx.ReplyWithButtonRows(md, buttons)
 		},
 	})
 
