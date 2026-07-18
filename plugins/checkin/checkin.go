@@ -147,8 +147,8 @@ func handleCheckin(ctx contract.CommandContext, pc *contract.PluginContext) erro
 	saveRecord(db, &rec)
 
 	// 随机奖励
-	goldReward := randRange(30, 500)  // 金币奖励
-	expReward := randRange(30, 500)   // 经验值奖励
+	goldReward := randRange(30, 300)  // 金币奖励
+	expReward := randRange(30, 300)   // 经验值奖励
 	expLevelReward := randRange(1, 4) // 经验等级奖励
 
 	// 更新银行账户

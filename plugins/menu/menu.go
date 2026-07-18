@@ -41,7 +41,9 @@ func (p *MenuPlugin) Init(pc *contract.PluginContext) error {
 				"\n" +
 				"- " + contract.CmdInput("我的签到", "我的签到", false) +
 				"\n" +
-				"- " + contract.CmdInput("材质包", "材质包", false)
+				"- " + contract.CmdInput("材质包", "材质包", false) +
+				"\n" +
+				"- " + contract.CmdInput("商店", "商店", false)
 			buttons := [][]contract.MessageButton{
 				{{ID: "btn_github", Label: "GitHub", URL: "https://github.com/Luoyangan/MC-LQBOT", Style: 1}},
 			}

@@ -134,6 +134,29 @@ func saveAccount(db *gorm.DB, acc *BankAccount) {
 	db.Save(acc)
 }
 
+// ── 状态码映射 ──
+
+// friendlyCodeMsg 将业务状态码转为用户友好的中文提示。
+// 空字符串表示无需特殊处理，使用原始的 Message 即可。
+func friendlyCodeMsg(code int) string {
+	switch code {
+	case 4301:
+		return "玩家不在线"
+	}
+	return ""
+}
+
+// checkAPIErr 检查 API 响应，失败时返回友好的错误消息。
+func checkAPIErr(rResp simpleResponse) string {
+	if rResp.Status {
+		return ""
+	}
+	if msg := friendlyCodeMsg(rResp.Code); msg != "" {
+		return msg
+	}
+	return rResp.Message
+}
+
 // ── 核心命令处理 ──
 
 // getPlayerName 从 whitelist_records 表中查询 QQ 用户绑定的 MC 玩家名（优先用原始大小写）。
@@ -295,7 +318,7 @@ func withdrawGoldToGame(ctx contract.CommandContext, db *gorm.DB, avatarURL, ser
 		return ctx.Reply("解析游戏服务器响应失败")
 	}
 	if !rResp.Status {
-		return ctx.Reply(fmt.Sprintf("提现金币失败：%s", rResp.Message))
+		return ctx.Reply(fmt.Sprintf("提现金币失败：%s", checkAPIErr(rResp)))
 	}
 
 	acc.Gold -= amount
@@ -338,7 +361,7 @@ func withdrawExpToGame(ctx contract.CommandContext, db *gorm.DB, avatarURL, serv
 		return ctx.Reply("解析游戏服务器响应失败")
 	}
 	if !rResp.Status {
-		return ctx.Reply(fmt.Sprintf("提现经验值失败：%s", rResp.Message))
+		return ctx.Reply(fmt.Sprintf("提现经验值失败：%s", checkAPIErr(rResp)))
 	}
 
 	acc.Exp -= amount
@@ -381,7 +404,7 @@ func withdrawExpLevelToGame(ctx contract.CommandContext, db *gorm.DB, avatarURL,
 		return ctx.Reply("解析游戏服务器响应失败")
 	}
 	if !rResp.Status {
-		return ctx.Reply(fmt.Sprintf("提现经验等级失败：%s\n\n说明：需玩家在线才能提现", rResp.Message))
+		return ctx.Reply(fmt.Sprintf("提现经验等级失败：%s", checkAPIErr(rResp)))
 	}
 
 	acc.ExpLevel -= amount
@@ -862,10 +885,6 @@ func postRequest(serverURL, token, path string, body interface{}) (string, error
 		return "", fmt.Errorf("请求服务器失败: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
-	}
 
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {

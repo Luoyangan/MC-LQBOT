@@ -373,7 +373,19 @@ func whitelistRequest(action, serverURL, token, playerName string) error {
 	}
 	defer resp.Body.Close()
 
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		return fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	bodyStr := strings.TrimSpace(buf.String())
 	if resp.StatusCode >= 400 {
+		var errResp struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal([]byte(bodyStr), &errResp) == nil && errResp.Message != "" {
+			return fmt.Errorf("MC 服务器返回错误: %s", errResp.Message)
+		}
 		return fmt.Errorf("MC 服务器返回错误状态码: %d", resp.StatusCode)
 	}
 
@@ -411,10 +423,6 @@ func checkWhitelist(serverURL, token, playerName string) (string, error) {
 		return "", fmt.Errorf("请求 MC 服务器失败: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("MC 服务器返回错误状态码: %d", resp.StatusCode)
-	}
 
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {

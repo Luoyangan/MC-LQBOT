@@ -297,10 +297,6 @@ func queryMCServer(serverURL, token string, req onlineTimeRequest) (string, erro
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("MC 服务器返回错误状态码: %d", resp.StatusCode)
-	}
-
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		return "", fmt.Errorf("读取响应失败: %w", err)
