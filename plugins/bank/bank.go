@@ -98,6 +98,16 @@ func (p *BankPlugin) Init(pc *contract.PluginContext) error {
 		},
 	})
 
+	pc.Commands.Register(contract.Command{
+		Name:        "银行查询",
+		Description: "查询用户银行信息（本地+游戏），仅管理员和群主可用",
+		Usage:       "银行查询 [@用户|玩家名]",
+		Permission:  "admin,owner",
+		Handler: func(ctx contract.CommandContext) error {
+			return handleAdminQuery(ctx, pc, mcServerURL, mcToken)
+		},
+	})
+
 	return nil
 }
 
@@ -505,36 +515,16 @@ func handleGiveAmount(ctx contract.CommandContext, pc *contract.PluginContext, s
 	}
 
 	acc := getAccount(db, ctx.AuthorID())
-	actionPath := "/api/currency"
 	label := "金币"
-	apiAction := "give"
 	switch wt {
 	case withdrawGold:
 		acc.Gold += amount
 	case withdrawExp:
-		actionPath = "/api/exp"
 		label = "经验值"
 		acc.Exp += amount
 	case withdrawExpLevel:
-		actionPath = "/api/exp"
 		label = "经验等级"
-		apiAction = "give_level"
 		acc.ExpLevel += amount
-	}
-
-	// 调用游戏 API 同步
-	rb, apiErr := postRequest(serverURL, token, actionPath, map[string]interface{}{
-		"playerName": playerName,
-		"amount":     amount,
-		"action":     apiAction,
-	})
-	if apiErr != nil {
-		pc.Logger.Warn("give sync to game failed, local only", "player", playerName, "error", apiErr)
-	} else {
-		var rResp simpleResponse
-		if json.Unmarshal([]byte(rb), &rResp) == nil && !rResp.Status {
-			pc.Logger.Warn("give sync to game rejected", "player", playerName, "msg", rResp.Message)
-		}
 	}
 
 	saveAccount(db, &acc)
@@ -542,8 +532,6 @@ func handleGiveAmount(ctx contract.CommandContext, pc *contract.PluginContext, s
 	balanceField := acc.Gold
 	if wt == withdrawExp {
 		balanceField = acc.Exp
-	} else if wt == withdrawExpLevel {
-		balanceField = acc.ExpLevel
 	} else if wt == withdrawExpLevel {
 		balanceField = acc.ExpLevel
 	}
@@ -577,36 +565,16 @@ func handleGiveToUser(ctx contract.CommandContext, pc *contract.PluginContext, s
 	}
 
 	acc := getAccount(db, targetID)
-	actionPath := "/api/currency"
 	label := "金币"
-	apiAction := "give"
 	switch wt {
 	case withdrawGold:
 		acc.Gold += amount
 	case withdrawExp:
-		actionPath = "/api/exp"
 		label = "经验值"
 		acc.Exp += amount
 	case withdrawExpLevel:
-		actionPath = "/api/exp"
 		label = "经验等级"
-		apiAction = "give_level"
 		acc.ExpLevel += amount
-	}
-
-	// 调用游戏 API 同步
-	rb, apiErr := postRequest(serverURL, token, actionPath, map[string]interface{}{
-		"playerName": playerName,
-		"amount":     amount,
-		"action":     apiAction,
-	})
-	if apiErr != nil {
-		pc.Logger.Warn("give sync to game failed, local only", "player", playerName, "error", apiErr)
-	} else {
-		var rResp simpleResponse
-		if json.Unmarshal([]byte(rb), &rResp) == nil && !rResp.Status {
-			pc.Logger.Warn("give sync to game rejected", "player", playerName, "msg", rResp.Message)
-		}
 	}
 
 	saveAccount(db, &acc)
@@ -714,9 +682,7 @@ func handleDeductFromSelf(ctx contract.CommandContext, pc *contract.PluginContex
 	}
 
 	acc := getAccount(db, ctx.AuthorID())
-	actionPath := "/api/currency"
 	label := "金币"
-	apiAction := "take"
 	switch wt {
 	case withdrawGold:
 		if amount > acc.Gold {
@@ -724,35 +690,17 @@ func handleDeductFromSelf(ctx contract.CommandContext, pc *contract.PluginContex
 		}
 		acc.Gold -= amount
 	case withdrawExp:
-		actionPath = "/api/exp"
 		label = "经验值"
 		if amount > acc.Exp {
 			return ctx.Reply(fmt.Sprintf("经验值不足！当前：%d，需要扣除：%d", acc.Exp, amount))
 		}
 		acc.Exp -= amount
 	case withdrawExpLevel:
-		actionPath = "/api/exp"
 		label = "经验等级"
-		apiAction = "take_level"
 		if amount > acc.ExpLevel {
 			return ctx.Reply(fmt.Sprintf("经验等级不足！当前：%d，需要扣除：%d", acc.ExpLevel, amount))
 		}
 		acc.ExpLevel -= amount
-	}
-
-	// 调用游戏 API 同步
-	rb, apiErr := postRequest(serverURL, token, actionPath, map[string]interface{}{
-		"playerName": playerName,
-		"amount":     amount,
-		"action":     apiAction,
-	})
-	if apiErr != nil {
-		pc.Logger.Warn("deduct sync to game failed, local only", "player", playerName, "error", apiErr)
-	} else {
-		var rResp simpleResponse
-		if json.Unmarshal([]byte(rb), &rResp) == nil && !rResp.Status {
-			pc.Logger.Warn("deduct sync to game rejected", "player", playerName, "msg", rResp.Message)
-		}
 	}
 
 	saveAccount(db, &acc)
@@ -792,9 +740,7 @@ func handleDeductFromUser(ctx contract.CommandContext, pc *contract.PluginContex
 	}
 
 	acc := getAccount(db, targetID)
-	actionPath := "/api/currency"
 	label := "金币"
-	apiAction := "take"
 	switch wt {
 	case withdrawGold:
 		if amount > acc.Gold {
@@ -802,35 +748,17 @@ func handleDeductFromUser(ctx contract.CommandContext, pc *contract.PluginContex
 		}
 		acc.Gold -= amount
 	case withdrawExp:
-		actionPath = "/api/exp"
 		label = "经验值"
 		if amount > acc.Exp {
 			return ctx.Reply(fmt.Sprintf("对方经验值不足！当前：%d，需要扣除：%d", acc.Exp, amount))
 		}
 		acc.Exp -= amount
 	case withdrawExpLevel:
-		actionPath = "/api/exp"
 		label = "经验等级"
-		apiAction = "take_level"
 		if amount > acc.ExpLevel {
 			return ctx.Reply(fmt.Sprintf("对方经验等级不足！当前：%d，需要扣除：%d", acc.ExpLevel, amount))
 		}
 		acc.ExpLevel -= amount
-	}
-
-	// 调用游戏 API 同步
-	rb, apiErr := postRequest(serverURL, token, actionPath, map[string]interface{}{
-		"playerName": playerName,
-		"amount":     amount,
-		"action":     apiAction,
-	})
-	if apiErr != nil {
-		pc.Logger.Warn("deduct sync to game failed, local only", "player", playerName, "error", apiErr)
-	} else {
-		var rResp simpleResponse
-		if json.Unmarshal([]byte(rb), &rResp) == nil && !rResp.Status {
-			pc.Logger.Warn("deduct sync to game rejected", "player", playerName, "msg", rResp.Message)
-		}
 	}
 
 	saveAccount(db, &acc)
@@ -891,4 +819,166 @@ func postRequest(serverURL, token, path string, body interface{}) (string, error
 		return "", fmt.Errorf("读取响应失败: %w", err)
 	}
 	return strings.TrimSpace(buf.String()), nil
+}
+
+// ── 管理员查询 ──
+
+// expQueryResponse 用于解析 /api/exp query 响应中的 data 字段。
+type expQueryData struct {
+	Experience struct {
+		TotalExp int `json:"totalExp"`
+		Level    int `json:"level"`
+	} `json:"experience"`
+}
+
+// handleAdminQuery 查询指定用户的本地和游戏银行数据。
+// 用法：查询银行 [@用户|玩家名]
+func handleAdminQuery(ctx contract.CommandContext, pc *contract.PluginContext, serverURL, token string) error {
+	if ctx.Scene() != contract.SceneGroup {
+		return ctx.Reply("该命令仅支持群聊使用")
+	}
+
+	db := getDB(pc)
+	if db == nil {
+		return ctx.Reply("数据库不可用")
+	}
+
+	// 确定目标用户 authorID
+	var targetID string
+	var displayName string
+
+	mentions := ctx.Mentions()
+	if len(mentions) > 0 {
+		targetID = mentions[0]
+	} else if ctx.ArgCount() >= 1 {
+		// 按玩家名查找 whitelist_records
+		playerName := strings.TrimSpace(ctx.Arg(0))
+		var record struct {
+			AppliedBy   string `gorm:"column:applied_by"`
+			DisplayName string `gorm:"column:display_name"`
+		}
+		if err := db.Table("whitelist_records").
+			Where("player_name = ? OR display_name = ?", playerName, playerName).
+			First(&record).Error; err != nil {
+			return ctx.Reply(fmt.Sprintf("未找到玩家「%s」的白名单记录", playerName))
+		}
+		targetID = record.AppliedBy
+		displayName = record.DisplayName
+	} else {
+		// 默认查询自己
+		targetID = ctx.AuthorID()
+	}
+
+	// 获取玩家名
+	playerName, err := getPlayerName(db, targetID)
+	if err != nil {
+		return ctx.Reply(fmt.Sprintf("目标用户 %s", err.Error()))
+	}
+	if displayName == "" {
+		displayName = playerName
+	}
+
+	// 查询本地数据
+	acc := getAccount(db, targetID)
+
+	// 并发查询游戏服
+	type curResult struct {
+		balance float64
+		err     error
+	}
+	type expResult struct {
+		totalExp int
+		level    int
+		err      error
+	}
+
+	curCh := make(chan curResult, 1)
+	expCh := make(chan expResult, 1)
+
+	go func() {
+		rb, e := postRequest(serverURL, token, "/api/currency", map[string]interface{}{
+			"playerName": playerName,
+			"action":     "query",
+		})
+		if e != nil {
+			curCh <- curResult{err: e}
+			return
+		}
+		var rResp simpleResponse
+		if e := json.Unmarshal([]byte(rb), &rResp); e != nil {
+			curCh <- curResult{err: fmt.Errorf("解析响应失败: %w", e)}
+			return
+		}
+		if !rResp.Status {
+			curCh <- curResult{err: fmt.Errorf("%s", friendlyCodeMsg(rResp.Code))}
+			return
+		}
+		// 从 Data 中提取 balance
+		balance := 0.0
+		if dataMap, ok := rResp.Data.(map[string]interface{}); ok {
+			if b, ok := dataMap["balance"].(float64); ok {
+				balance = b
+			}
+		}
+		curCh <- curResult{balance: balance}
+	}()
+
+	go func() {
+		rb, e := postRequest(serverURL, token, "/api/exp", map[string]interface{}{
+			"playerName": playerName,
+			"action":     "query",
+		})
+		if e != nil {
+			expCh <- expResult{err: e}
+			return
+		}
+		var rResp simpleResponse
+		if e := json.Unmarshal([]byte(rb), &rResp); e != nil {
+			expCh <- expResult{err: fmt.Errorf("解析响应失败: %w", e)}
+			return
+		}
+		if !rResp.Status {
+			expCh <- expResult{err: fmt.Errorf("%s", friendlyCodeMsg(rResp.Code))}
+			return
+		}
+		// 从 Data 中提取 totalExp 和 level
+		totalExp, level := 0, 0
+		if dataMap, ok := rResp.Data.(map[string]interface{}); ok {
+			if exp, ok := dataMap["experience"].(map[string]interface{}); ok {
+				if t, ok := exp["totalExp"].(float64); ok {
+					totalExp = int(t)
+				}
+				if l, ok := exp["level"].(float64); ok {
+					level = int(l)
+				}
+			}
+		}
+		expCh <- expResult{totalExp: totalExp, level: level}
+	}()
+
+	curR := <-curCh
+	expR := <-expCh
+
+	// 格式化输出
+	var md strings.Builder
+	md.WriteString(fmt.Sprintf("## 银行查询\n- **用户 ID**：%s\n- **玩家名**：%s\n\n", targetID, displayName))
+
+	md.WriteString("**📦 本地数据**\n")
+	md.WriteString(fmt.Sprintf("- 💰 金币：%d\n", acc.Gold))
+	md.WriteString(fmt.Sprintf("- ⭐ 经验值：%d\n", acc.Exp))
+	md.WriteString(fmt.Sprintf("- ⭐ 经验等级：%d\n\n", acc.ExpLevel))
+
+	md.WriteString("**🎮 游戏数据**\n")
+	if curR.err != nil {
+		md.WriteString(fmt.Sprintf("- 💰 金币：查询失败（%v）\n", curR.err))
+	} else {
+		md.WriteString(fmt.Sprintf("- 💰 金币：%.0f\n", curR.balance))
+	}
+	if expR.err != nil {
+		md.WriteString(fmt.Sprintf("- ⭐ 经验值：查询失败（%v）\n", expR.err))
+	} else {
+		md.WriteString(fmt.Sprintf("- ⭐ 经验值：%d（Lv.%d）\n", expR.totalExp, expR.level))
+	}
+
+	return ctx.ReplyMarkdown(md.String())
 }

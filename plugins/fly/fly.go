@@ -83,7 +83,7 @@ func handleFly(ctx contract.CommandContext, pc *contract.PluginContext, mcServer
 			"- **关闭飞行**：`飞行 <玩家名> 关闭`\n" +
 			"- **切换飞行**：`飞行 <玩家名> 切换`\n" +
 			"\n**示例**：`飞行 Steve 开启`"
-		return ctx.Reply(md)
+		return ctx.ReplyMarkdown(md)
 	}
 
 	action := "query"
